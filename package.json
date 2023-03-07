@@ -1,0 +1,25 @@
+{
+  "name": "vcsbvr-vscode",
+  "displayName": "vcsbvr-vscode",
+  "description": "SBVR syntax highlight",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.76.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [{
+      "id": "sbvr",
+      "aliases": ["SBVR", "sbvr"],
+      "extensions": [".sbvr"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "sbvr",
+      "scopeName": "text.sbvr",
+      "path": "./syntaxes/sbvr.tmLanguage.json"
+    }]
+  }
+}

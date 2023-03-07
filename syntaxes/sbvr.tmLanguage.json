@@ -1,0 +1,102 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "SBVR",
+  "patterns": [
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#single-line-comment-consuming-line-ending"
+    }
+  ],
+  "repository": {
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.operator",
+          "match": "\\b(is|are|has|have|can|could|may|might|must|should|shall|will)\\b"
+        },
+        {
+          "name": "entity.name.function.macro",
+          "match": "\\b(It is obligatory that|It is necessary that|It is prohibited that|It is forbidden that|It is impossible that|It is not possible that|It is possible that|It is permitted that|that|that the)\\b"
+        },
+        {
+          "name": "storage.modifier",
+          "match": "\\b(a|a given|an|some|at most|at least|more than|exactly|no)\\b"
+        },
+        {
+          "name": "entity.name.function.member",
+          "match": "\\b(Rule Name|Guidance Type|Source|Synonymous Statement|Note|Example|Enforcement Level|Synonymous Form|Term Form|Reference Type)\\b"
+        },
+        {
+          "name": "entity.name.namespace, sbvr.vocabulary",
+          "match": "\\b(Vocabulary)\\b"
+        },
+        {
+          "name": "entity.name.section",
+          "match": "\\b(Name|Term|Fact Type|Rule)\\b"
+        },
+        {
+          "name": "entity.name.method",
+          "match": "\\b(Concept Type|Definition|Definition (Informal)|Description|Dictionary Basis|Example|General Concept|Namespace URI|Necessity|Note|Possibility|Reference Scheme|See|Source|Subject Field)\\b"
+        },
+        {
+          "name": "string.regexp, emphasis sbvr.type",
+          "match": "\\b(Short Text|Text|Integer|Real|Length|Date)\\b"
+        },
+        {
+          "name": "meta.cast",
+          "match": "\\b((Type))\\b"
+        },
+        {
+          "match": "\\b([0-9a-fA-F]{40}|[0-9a-fA-F]{10}|[0-9a-fA-F]{7})\\b",
+          "name": "constant.language"
+        },
+        {
+          "match": "\\b[0-9a-fA-F]{8}[-]?([0-9a-fA-F]{4}[-]?){3}[0-9a-fA-F]{12}\\b",
+          "name": "constant.language sbvr.constant"
+        },
+        {
+          "match": "\\b([0-9a-fA-F]{2,}[:-])+[0-9a-fA-F]{2,}+\\b",
+          "name": "constant.language sbvr.constant"
+        },
+        {
+          "match": "\\b([0-9]+|true|false|null|one|each)\\b",
+          "name": "constant.language sbvr.constant"
+        },
+        {
+          "comment": " -> Multiple Words -> Term",
+          "match": "(\\b\\S+)(?:\\s+\\1\\b)+",
+          "name": "variable.name sbvr.term"
+        },
+        {
+          "match": "\\b(0x[a-fA-F0-9]+)\\b",
+          "name": "constant.language sbvr.constant"
+        }
+      ]
+    },
+    "single-line-comment-consuming-line-ending": {
+      "begin": "(^[ \\t]+)?((--)(?:\\s*((@)internal)(?=\\s|$))?)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.whitespace.comment.leading.sbvr"
+        },
+        "2": {
+          "name": "comment.line.double-dash.sbvr"
+        },
+        "3": {
+          "name": "punctuation.definition.comment.sbvr"
+        },
+        "4": {
+          "name": "storage.type.internaldeclaration.sbvr"
+        },
+        "5": {
+          "name": "punctuation.decorator.internaldeclaration.sbvr"
+        }
+      },
+      "end": "(?=^)",
+      "contentName": "comment.line.double-dash.sbvr"
+    }
+  },
+  "scopeName": "text.sbvr"
+}
