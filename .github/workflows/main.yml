@@ -20,9 +20,9 @@ jobs:
         with:
           node-version: 16.x
       - run: npm install
-      - run: xvfb-run -a npm lint
+      - run: xvfb-run -a npm run lint
         if: runner.os == 'Linux'
-      - run: npm lint
+      - run: npm run lint
         if: runner.os != 'Linux'
   publish:
     needs: build
