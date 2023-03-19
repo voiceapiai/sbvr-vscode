@@ -1,25 +1,59 @@
 {
-  "name": "vcsbvr-vscode",
-  "displayName": "vcsbvr-vscode",
+  "name": "vscode.sbvr",
+  "displayName": "SBVR",
   "description": "SBVR syntax highlight",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.76.0"
   },
   "categories": [
-    "Programming Languages"
+    "Other",
+    "Language Packs"
   ],
+  "capabilities": {},
   "contributes": {
-    "languages": [{
-      "id": "sbvr",
-      "aliases": ["SBVR", "sbvr"],
-      "extensions": [".sbvr"],
-      "configuration": "./language-configuration.json"
-    }],
-    "grammars": [{
-      "language": "sbvr",
-      "scopeName": "text.sbvr",
-      "path": "./syntaxes/sbvr.tmLanguage.json"
-    }]
+    "languages": [
+      {
+        "id": "sbvr",
+        "aliases": [
+          "SBVR",
+          "sbvr"
+        ],
+        "extensions": [
+          ".sbvr"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "sbvr",
+        "scopeName": "text.sbvr",
+        "path": "./syntaxes/sbvr.tmLanguage.json"
+      }
+    ]
+  },
+  "activationEvents": [],
+	"main": "./out/extension.js",
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "lint": "eslint \"src/**/*.ts\"",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^8.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^16.11.7",
+    "@types/vscode": "^1.73.0",
+    "@typescript-eslint/eslint-plugin": "^5.42.0",
+    "@typescript-eslint/parser": "^5.42.0",
+    "@vscode/test-electron": "^2.2.3",
+    "eslint": "^8.26.0",
+    "js-yaml": "^4.1.0",
+    "prettier": "^2.8.4",
+    "typescript": "^4.9.4",
+    "vscode-languageserver-textdocument": "^1.0.1"
   }
 }

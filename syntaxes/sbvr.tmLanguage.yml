@@ -1,0 +1,123 @@
+$schema: https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json
+name: SBVR
+scopeName: text.sbvr
+patterns:
+  - include: '#strings'
+  - include: '#keywords'
+  - include: '#single-line-comment-consuming-line-ending'
+  - include: '#term'
+  - include: '#facttype'
+  - include: '#vocabulary'
+  - include: '#junction'
+repository:
+  strings:
+    name: string.quoted.double.sbvr
+    begin: '"'
+    end: '"'
+    patterns:
+      - name: constant.character.escape.sbvr
+        match: \\.
+  keywords:
+    patterns:
+      - name: keyword.operator
+        match: \b(is|are|has|have|can|could|may|might|must|should|shall|will)\b
+      - name: entity.name.function.macro
+        match: >-
+          \b(It is obligatory that|It is necessary that|It is prohibited that|It
+          is forbidden that|It is impossible that|It is not possible that|It is
+          possible that|It is permitted that|that|that the)\b
+      - name: storage.modifier
+        match: \b(a|a given|an|some|at most|at least|more than|exactly|no)\b
+      - name: entity.name.function.member
+        match: >-
+          \b(Rule Name|Guidance Type|Source|Synonymous
+          Statement|Note|Example|Enforcement Level|Synonymous Form|Term
+          Form|Reference Type)\b
+      - name: entity.name.namespace, sbvr.vocabulary
+        match: \b(Vocabulary)\b
+      - name: storage.type.sbvr
+        match: '^\s*(Term|Name|Fact Type|Rule Name|Synonym|Synonymous Form|Term Form):'
+      - name: keyword.control.sbvr
+        match: >-
+          ^\s*(Rule|Concept Type|Definition|Definition
+          (Informal)|Description|Dictionary Basis|Example|Enforcement
+          Level|General Concept|Guidance Type|Namespace
+          URI|Necessity|Note|Possibility|Reference Scheme|See|Source|Subject
+          Field|Synonymous Statement):
+      - name: string.regexp, emphasis sbvr.type
+        match: \b(Short Text|Text|Integer|Real|Length|Date)\b
+      - name: meta.cast
+        match: \b((Type))\b
+      - match: \b(true|false|null)\b
+        name: constant.language sbvr.constant
+      - match: \b([0-9]+|one)\b
+        name: constant.language constant.numeric.sbvr
+      - comment: ' -> Multiple Words -> Term'
+        match: (\b\S+)(?:\s+\1\b)+
+        name: variable.name sbvr.term
+  single-line-comment-consuming-line-ending:
+    begin: (^[ \t]+)?((--)(?:\s*((@)internal)(?=\s|$))?)
+    beginCaptures:
+      '1':
+        name: punctuation.whitespace.comment.leading.sbvr
+      '2':
+        name: comment.line.double-dash.sbvr
+      '3':
+        name: punctuation.definition.comment.sbvr
+      '4':
+        name: storage.type.internaldeclaration.sbvr
+      '5':
+        name: punctuation.decorator.internaldeclaration.sbvr
+    end: (?=^)
+    contentName: comment.line.double-dash.sbvr
+  modifier:
+    patterns:
+      - match: \b(?i:{{modifier}})\b
+        name: variable.other.constant.sbvr
+  qualifier:
+    patterns:
+      - match: \b(?i:{{qualifier}})\b
+        name: variable.other.constant.sbvr
+  quantifier:
+    patterns:
+      - match: \b(?i:{{quantifier}})\b
+        name: variable.other.constant.sbvr
+  junction:
+    patterns:
+      - match: \b(?i:and|or)\b
+        name: keyword.operator.word.junction.sbvr
+  vocabulary:
+    patterns:
+      - match: (?i:(Vocabulary:))\s+([a-zA-Z][a-zA-Z0-9\s]+[a-zA-Z0-9])
+        name: entity.name.type.vocabulary.sbvr
+        captures:
+          '1':
+            name: keyword.other.vocabulary.sbvr
+          '2':
+            name: string.unquoted.plain.sbvr
+  term:
+    patterns:
+      - match: (?i:(Term:))\s+([a-zA-Z][a-zA-Z0-9\s]+[a-zA-Z0-9])
+        name: entity.name.type.term.sbvr
+        captures:
+          '1':
+            name: keyword.other.term.sbvr
+          '2':
+            name: string.unquoted.plain.sbvr
+  facttype:
+    patterns:
+      - match: (?i:(Fact Type:))\s+(.*)
+        name: entity.name.type.facttype.sbvr
+        captures:
+          '1':
+            name: keyword.other.facttype.sbvr
+          '2':
+            name: string.unquoted.plain.sbvr
+  attribute:
+    patterns:
+      - match: (?i:([a-zA-Z][a-zA-Z0-9\s]+[a-zA-Z0-9]:))\s+
+        captures:
+          '1':
+            name: keyword.operator.attribute.sbvr
+        push: content
+
