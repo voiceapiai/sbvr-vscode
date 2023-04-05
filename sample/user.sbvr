@@ -1,0 +1,64 @@
+Vocabulary: Auth
+
+Term:       username
+	Concept Type: Short Text (Type)
+Term:       password
+	Concept Type: Hashed (Type)
+Term:       name
+	Concept Type: Text (Type)
+Term:       key
+	Concept Type: Short Text (Type)
+Term:       expiry date
+	Concept Type: Date Time (Type)
+Term:       description
+	Concept Type: Text (Type)
+-- permission
+Term:       permission
+	Reference Scheme: name
+Fact type:  permission has name
+	Necessity: Each permission has exactly one name.
+	Necessity: Each name is of exactly one permission.
+-- role
+Term:       role
+	Reference Scheme: name
+Fact type:  role has name
+	Necessity: Each role has exactly one name.
+	Necessity: Each name is of exactly one role.
+Fact type:  role has permission
+-- actor
+Term:       actor
+-- user
+Term:       user
+	Reference Scheme: username
+	Concept Type: actor
+Fact type:  user has username
+	Necessity: Each user has exactly one username.
+	Necessity: Each username is of exactly one user.
+Fact type:  user has password
+	Necessity: Each user has exactly one password.
+Fact type:  user has role
+	Note: A 'user' will inherit all the 'permissions' that the 'role' has.
+	Term Form: user role
+	Fact type: user role has expiry date
+		Necessity: Each user role has at most one expiry date.
+Fact type:  user has permission
+	Term Form: user permission
+	Fact type: user permission has expiry date
+		Necessity: Each user permission has at most one expiry date.
+-- api key
+Term:       api key
+	Reference Scheme: key
+Fact type:  api key has key
+	Necessity: each api key has exactly one key
+	Necessity: each key is of exactly one api key
+Fact type: api key has expiry date
+	Necessity: each api key has at most one expiry date.
+Fact type:  api key has role
+	Note: An 'api key' will inherit all the 'permissions' that the 'role' has.
+Fact type:  api key has permission
+Fact type:  api key is of actor
+	Necessity: each api key is of exactly one actor
+Fact type:  api key has name
+	Necessity: Each api key has at most one name.
+Fact type:  api key has description
+	Necessity: Each api key has at most one description.

@@ -1,7 +1,7 @@
 {
   "name": "sbvr-vscode",
   "displayName": "SBVR",
-  "description": "SBVR language client & syntax highlight.\nThe SBVR standard defines the vocabulary and rules for documenting the semantics of business vocabularies, business facts, and business rules; as well as an XMI schema for the interchange of business vocabularies and business rules among organizations and between software tools.",
+  "description": "SBVR standard grammar & syntax highlight.\nThe SBVR standard defines the vocabulary and rules for documenting the semantics of business vocabularies, business facts, and business rules; as well as an XMI schema for the interchange of business vocabularies and business rules among organizations and between software tools.",
   "version": "0.0.1",
   "publisher": "voiceapi",
   "private": true,
@@ -29,6 +29,10 @@
         "extensions": [
           ".sbvr"
         ],
+        "icon": {
+          "light": "./icons/roadmap.svg",
+          "dark": "./icons/roadmap.svg"
+        },
         "configuration": "./language-configuration.json"
       }
     ],
@@ -41,6 +45,7 @@
     ]
   },
   "activationEvents": [],
+  "icon": "./icons/roadmap.png",
   "main": "./out/extension.js",
   "scripts": {
     "vscode:prepublish": "npm run compile",
@@ -50,6 +55,8 @@
     "deploy": "vsce publish --yarn"
   },
   "dependencies": {
+    "@balena/sbvr-parser": "^1.4.3",
+    "@balena/sbvr-types": "^3.5.0",
     "vscode-languageclient": "^8.1.0"
   },
   "devDependencies": {

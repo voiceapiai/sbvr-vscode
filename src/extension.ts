@@ -1,4 +1,7 @@
 import * as vscode from 'vscode';
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+import { SBVRParser } from '@balena/sbvr-parser';
 
 const tokenTypes = new Map<string, number>();
 const tokenModifiers = new Map<string, number>();
@@ -65,6 +68,13 @@ export function activate(context: vscode.ExtensionContext) {
     new SbvrDefinitionProvider()
   );
   context.subscriptions.push(definitionProvider);
+
+  const documentSymbolProvider =
+    vscode.languages.registerDocumentSymbolProvider(
+      { language: 'sbvr' },
+      new SbvrDocumentSymbolProvider()
+    );
+  context.subscriptions.push(documentSymbolProvider);
 }
 
 interface IParsedToken {
@@ -166,5 +176,48 @@ class SbvrDefinitionProvider implements vscode.DefinitionProvider {
     token: vscode.CancellationToken
   ): vscode.ProviderResult<vscode.Definition> {
     return null;
+  }
+}
+
+class SbvrDocumentSymbolProvider implements vscode.DocumentSymbolProvider {
+  private format(cmd: string): string {
+    return cmd
+      .substr(1)
+      .toLowerCase()
+      .replace(/^\w/, c => c.toUpperCase());
+  }
+
+  public provideDocumentSymbols(
+    document: vscode.TextDocument,
+    token: vscode.CancellationToken
+  ): Promise<vscode.DocumentSymbol[]> {
+    return new Promise((resolve, reject) => {
+      const symbols: vscode.DocumentSymbol[] = [];
+      const nodes = [symbols];
+      const inside_obj = false;
+      const inside_prop = false;
+      const inside_userinput = false;
+
+      const symbolkind_obj = vscode.SymbolKind.Object;
+      const symbolkind_prop = vscode.SymbolKind.Property;
+      const symbolkind_mtd = vscode.SymbolKind.Method;
+
+      /*   const marker_symbol = new vscode.DocumentSymbol(
+        'Marker',
+        'Component',
+        symbolkind_obj,
+        line.range,
+        line.range
+      ); */
+
+      const parser = SBVRParser.createInstance();
+      const text = document.getText();
+      parser.setInput(text);
+      const LF = parser.matchAll(text, 'Process');
+
+      console.log(parser.lines);
+
+      resolve(symbols);
+    });
   }
 }
