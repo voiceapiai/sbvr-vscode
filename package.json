@@ -44,7 +44,14 @@
       }
     ]
   },
-  "activationEvents": [],
+  "configurationDefaults": {
+    "[sbvr]": {
+      "editor.semanticHighlighting.enabled": true
+    }
+  },
+  "activationEvents": [
+    "onLanguage:sbvr"
+  ],
   "icon": "./icons/roadmap.png",
   "main": "./out/extension.js",
   "scripts": {

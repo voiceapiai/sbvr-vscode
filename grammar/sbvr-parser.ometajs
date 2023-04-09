@@ -1,0 +1,1125 @@
+//A parser for Semantics of Business Vocabulary and Rules (SBVR), an OMG standard.
+//Converts from Structured English (SBVR-SE) to Logical Formulation (SBVR-LF)
+//Specification: http://www.omg.org/spec/SBVR/1.0/
+
+var SBVRLibs = require('./sbvr-libs').SBVRLibs,
+	_ = require('lodash');
+require('./inflection');
+
+function isEOL(x) {
+	return ['\n', '\r'].includes(x)
+}
+function isSpace(x) {
+	return x.charCodeAt(0) <= 32;
+}
+
+var negatableVerbs = ['is', 'are', 'has', 'have', 'can', 'could', 'may', 'might', 'must', 'should', 'shall', 'will'];
+var negatedVerbs = negatableVerbs.map(function (verb) {
+	if (verb === 'will') {
+		return "won't";
+	}
+	return verb + "n't"
+})
+
+export ometa SBVRParser <: SBVRLibs {
+	EOL =
+		(	anything:x
+			?(isEOL(x))
+		)+,
+	EOLSpaces =
+		{false}:eol
+		(	@<spaces>:c
+			?(c.fromIdx !== c.toIdx)
+		|	EOL
+			{true}:eol
+		)*
+		?eol,
+	IdentifierKey :identifier =
+		(	?Array.isArray(identifier[3])
+			?(identifier[3][0] == 'Number')
+			-> identifier[3][1]
+		|	-> ''
+		):index
+		-> (identifier[1] + '|' + identifier[2] + '|' + index)
+	,
+	Bind :identifier :bindings =
+		// Check a var exists to bind to.
+		IdentifierKey(identifier):identifierKey
+		{this.ruleVars[identifierKey]}:varNumber
+		?(varNumber != null)
+		{['RoleBinding', identifier, varNumber]}:binding
+		(	?bindings
+			{bindings.push(binding)}
+		)?
+		-> binding,
+
+	spaces =
+		matchUntil(function (x) {
+			return !isSpace(x) || isEOL(x)
+		})
+		{	if (this.input.hd === '-') {
+				this._opt(function() {
+					return this._apply("NewComment");
+				})
+			}
+		},
+
+	Number =
+		(	spaces <digit+>:n
+			-> ['Number', parseInt(n, 10)]
+		|	"one"
+			-> ['Number', 1]
+		),
+
+	Real =
+		spaces
+		<	'-'?
+			digit+
+			'.'
+			digit+
+		>:n
+		-> ['Real', Number(n)],
+
+	Integer =
+		spaces
+		<	'-'?
+			digit+
+		>:n
+		-> ['Integer', Number(n)],
+	Text =
+		spaces
+		'"'
+		<	(	'\\' '"'
+			|	~'"'
+				anything
+			)+
+		>:text
+		'"'
+		-> ['Text', text],
+	Value =
+			Real
+		|	Integer
+		|	Text,
+
+	toSBVREOL =
+		spaces
+		<	(	spaces
+				(	InformalIdentifier
+				|	'\'' InformalIdentifier '\''
+				|	(	~space
+						anything
+					)+
+				)
+			)*
+		>,
+	toEOL =
+		<matchUntil(isEOL)>,
+
+	token :x =
+		spaces seq(x):s
+		&(	space
+		|	end
+		)
+		-> s,
+
+	AddIdentifier :identifierType :baseSynonym =
+		{this.input}:startInput
+		(IdentifierPart+):identifier
+		{identifier.join(' ')}:identifier
+		{this._addToken(startInput, this.input, identifierType, [])}
+		-> function() {
+			return $elf._AddIdentifier(identifierType, identifier, baseSynonym)
+		},
+
+	InformalIdentifier =
+		Identifier(undefined, true),
+	Identifier :factTypeSoFar :noAutoComplete =
+		~(<Term(factTypeSoFar)?>:term)?
+		~(<Name(factTypeSoFar)?>:name)?
+		(	?(term || name)
+			(	?(term.length > name.length)
+				Term(factTypeSoFar)
+			|	Name(factTypeSoFar)
+			)
+		|	// If branch tracking (for autocomplete) is enabled and we haven't explicitly excluded
+			// this branch then run the full Term/Name rules so they get tracked as potential branches
+			?(!noAutoComplete && this._getBranches() !== undefined)
+			(	Term(factTypeSoFar)
+			|	Name(factTypeSoFar)
+			)
+		),
+	Vocabulary =
+		FindVocabulary:vocabulary
+		-> ['Vocabulary', vocabulary],
+	Name :factTypeSoFar =
+		FindIdentifier('Name', factTypeSoFar),
+	Term :factTypeSoFar =
+		FindIdentifier('Term', factTypeSoFar):term
+		(	<digit+>:n
+			{term.push(['Number', Number(n)])}
+		)?
+		-> term,
+	FindIdentifier :identifierType :factTypeSoFar =
+		spaces
+		'\''?:quote
+		FindIdentifierNest(identifierType, factTypeSoFar):identifier
+		(	?(!quote)
+		|	'\''
+		)
+		-> identifier,
+
+	FindIdentifierNest :identifierType :factTypeSoFar :identifierSoFar =
+		IdentifierPart:part
+		(	?identifierSoFar
+			-> (identifierSoFar + ' ' + part)
+		|	-> part
+		):identifierSoFar
+		// Make sure the potential identifier so far is short enough to be valid.
+		?(identifierSoFar.length <= this.longestIdentifier[identifierType])
+		(	FindIdentifierNest(identifierType, factTypeSoFar, identifierSoFar)
+		|	(	FindVocabulary(identifierSoFar)
+			|	-> this.currentVocabulary
+			):vocabulary
+			IsFactTypeIdentifier([identifierType, identifierSoFar, vocabulary], factTypeSoFar)
+		),
+
+	FindVocabulary :identifier =
+		spaces
+		'('?:bracket
+		FindVocabularyNest:vocabulary
+		?(!identifier || this.vocabularies[vocabulary]['IdentifierChildren'].hasOwnProperty(identifier))
+		(	?(!bracket)
+		|	')'
+		)
+		-> vocabulary,
+
+	FindVocabularyNest :vocabularySoFar =
+		IdentifierPart:part
+		(	?vocabularySoFar
+			-> (vocabularySoFar + ' ' + part)
+		|	-> part
+		):vocabularySoFar
+		// Make sure the potential identifier so far is short enough to be valid.
+		?(vocabularySoFar.length <= this.longestIdentifier['Vocabulary'])
+		(	FindVocabularyNest(vocabularySoFar)
+		|	?this.vocabularies.hasOwnProperty(vocabularySoFar)
+			-> vocabularySoFar
+		),
+
+	IdentifierPart =
+		spaces
+		<	(	anything:r
+				// Equivalent to `letter | '-'`
+				?(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r === '-')
+			)+
+		>,
+
+
+	addVerb =
+		ClearSuggestions Verb(true),
+	Verb :factTypeSoFar =
+		spaces
+		'['?:bracket
+		FindVerb(factTypeSoFar, bracket):verb
+		(	?(!bracket)
+		|	spaces
+			']'
+		)
+		-> verb,
+	FindVerb :factTypeSoFar :bracketed :verbSoFar :negated =
+		(	?(factTypeSoFar !== true && !verbSoFar)
+			(	Keyword('does not')
+			|	Keyword('doesn\'t')
+			|	matchForAny('Keyword', negatedVerbs, true):index
+				// Use the non-negated form for the verb
+				{this._verbForm(negatableVerbs[index])}:verbSoFar
+			)
+			{true}:negated
+		)?
+
+		spaces
+		(	?bracketed
+			// If we're bracketed then we ignore checking for
+			// identifiers so they can be included in the verb
+		|	~Identifier
+		)
+		IdentifierPart:part
+
+		(	?verbSoFar
+			-> (verbSoFar + ' ' + part)
+		|	-> this._verbForm(part)
+		):verbSoFar
+		(	?(factTypeSoFar !== true && negatableVerbs.includes(verbSoFar))
+			spaces
+			Keyword('not')
+			{true}:negated
+		)?
+		(	FindVerb(factTypeSoFar, bracketed, verbSoFar, negated)
+		|	(	?(factTypeSoFar === true)
+			|	IsVerb(factTypeSoFar, verbSoFar)
+			)
+			{['Verb', verbSoFar, negated === true]}:verb
+			-> verb
+		)
+	,
+
+	JoiningQuantifier =
+		matchForAll('Keyword',["and","at","most"]),
+
+	// Be very careful with anywhere you use quantifier as any in-place modifications of the array will be remembered in memoisation.
+	Quantifier =
+		(	matchForAny('Keyword',["each","a given"])
+			-> ['UniversalQuantification']
+		|	matchForAny('Keyword',["a","an","some"])
+			-> ['ExistentialQuantification']
+		|	matchForAll('Keyword',["at","most"]) Number:n
+			-> ['AtMostNQuantification', ['MaximumCardinality', n]]
+		|	matchForAll('Keyword',["at","least"]) Number:n
+			(	JoiningQuantifier
+				Number:m
+				-> ['NumericalRangeQuantification', ['MinimumCardinality', n], ['MaximumCardinality', m]]
+			|	-> ['AtLeastNQuantification', ['MinimumCardinality', n]]
+			)
+		|	matchForAll('Keyword',["more","than"]) Number:n {++n[1]}
+			-> ['AtLeastNQuantification', ['MinimumCardinality', n]]
+		|	Keyword("exactly") Number:n
+			-> ['ExactQuantification', ['Cardinality', n]]
+		|	Keyword("no")
+			-> ['ExactQuantification', ['Cardinality', ['Number', 0]]]
+		),
+
+	Keyword :word :noToken =
+		(	?(noToken===true) seq(word)
+		|	?(noToken!==true) token(word)
+		),
+
+	addThat =
+		Keyword("that"),
+	addThe =
+		Keyword("the"),
+	DisableCommas :bool =
+		{this.disableCommas = bool},
+	// We must pass in an argument to add comma, otherwise we may use a memoised version where commas were disabled.
+	addComma :force =
+		?(force || !this.disableCommas)
+		Keyword(","),
+	CreateVar :identifier =
+		IdentifierKey(identifier):identifierKey
+		(	// If the identifierKey ends with a | (ie it has no index), then we always want to create a new var.
+			?(identifierKey.slice(-1) !== '|')
+			?this.ruleVars[identifierKey]
+			-> this.ruleVars[identifierKey]
+		|	{this.ruleVars[identifierKey] = this.ruleVarsCount++}
+		):varNumber
+		-> ['Variable', ['Number', varNumber], identifier],
+	EmbedVar :identifier :data =
+		IdentifierKey(identifier):identifierKey
+		{this.ruleVars[identifierKey] = data},
+
+	IsAtomicFormulation :factType :bindings =
+		IsFactType(factType):realFactType
+		?realFactType
+		-> ['AtomicFormulation'].concat([['FactType'].concat(factType)], bindings),
+
+	ClosedProjection :identifier :bind =
+		(	addThat
+			(	Junction('VerbContinuation', [[identifier], [bind]])
+			|	Junction('RuleBody', [[], [], identifier, bind])
+			)
+		|	// Check for 'that is of' -> 'of'
+			Keyword('of')
+			{[identifier]}:factType
+			{'is of'}:verb
+			IsVerb(factType, verb)
+			{factType.push(['Verb', verb, false])}
+			{[bind]}:bindings
+			(	Junction('RuleBody', [factType, bindings])
+			|	IsAtomicFormulation(factType, bindings)
+			)
+		),
+
+	TermEntity :factType :bindings =
+		Term(factType):term
+		CreateVar(term):varLF
+		Bind(term, bindings):bind
+		(	ClosedProjection(term, bind):thatLF
+			{varLF.push(thatLF)}
+			(	?factType
+				addComma(false)
+			)?
+		)?
+		-> {term: term, lf: varLF},
+
+	RuleBody :factType :bindings :parentIdentifier :parentBind =
+		(	Quantifier:quant
+			TermEntity(factType, bindings):termEntity
+			{factType.push(termEntity.term)}
+		|	addThe
+			// TODO: Should be a "ReferencedTerm" or Name, rather than Identifier (which is Term or Name)
+			Identifier(factType):identifier
+			(	Bind(identifier, bindings)
+			|	// Embed the var.
+				// TODO: This should only happen for "Name"'s
+				EmbedVar(identifier, identifier)
+				Bind(identifier, bindings)
+			)
+			{factType.push(identifier)}
+		|	// Embedded data
+			Value:data
+			// Is the type of embedded data allowed here?
+			IsFactTypeIdentifier(['Term', data[0], 'Type'], factType):identifier
+			{identifier.push(data)}
+			// Create the var so we can bind to it.
+			EmbedVar(identifier, data)
+			Bind(identifier, bindings):bind
+			// Add the data to the binding
+			{bind[2] = data}
+			{factType.push(identifier)}
+		)
+		(	Junction('VerbContinuation', [factType, bindings, parentIdentifier, parentBind])
+		|	IsAtomicFormulation(factType, bindings)
+		):lf
+		-> (quant == null ? lf : quant.concat([termEntity.lf, lf])),
+
+	VerbContinuation :factType :bindings :parentIdentifier :parentBind =
+		Verb(factType):v
+		{factType.push(v)}
+		{	if(parentIdentifier != null) {
+				factType.push(parentIdentifier);
+				bindings.push(parentBind);
+			}
+		}
+		(	Junction('RuleBody', [factType, bindings])
+		|	IsAtomicFormulation(factType, bindings)
+		),
+
+	Modifier =
+		"It" "is"
+		(	"obligatory"
+			-> ['ObligationFormulation']
+		|	"necessary"
+			-> ['NecessityFormulation']
+		|	(	"prohibited"
+			|	"forbidden"
+			)
+			-> ['ObligationFormulation', ['LogicalNegation']]
+		|	(	"impossible"
+			|	"not" "possible"
+			)
+			-> ['NecessityFormulation', ['LogicalNegation']]
+		|	"possible"
+			-> ['PossibilityFormulation']
+		|	"permitted"
+			-> ['PermissibilityFormulation']
+		):r
+		"that"
+		-> r,
+
+	Disjunction =
+		Keyword('or')
+		-> 'Disjunction',
+
+	Conjunction =
+		Keyword('and')
+		-> 'Conjunction',
+
+	JunctionType =
+		(	Disjunction
+		|	Conjunction
+		),
+
+	// This is used as the check in the UpcomingCommaJunction.
+	SerialCommaCheck =
+		','
+		// We can't use JunctionType here as it will be memoised and then not highlighted properly
+		// due to memoisations not adding nested token (being in a lookahead avoids adding tokens)
+		(	"and"
+		|	"or"
+		),
+	// This checks if there's an upcoming comma junction by looking for an Oxford/serial comma.
+	UpcomingCommaJunction =
+		&(	(	~SerialCommaCheck
+				anything:x
+				?(!isEOL(x))
+			)*
+			SerialCommaCheck
+			-> true
+		|	-> false
+		),
+
+	SimpleJunction :ruleName :args =
+		{this._applyWithArgs.apply(this, [ruleName].concat(_.cloneDeep(args)))}:result
+		(	JunctionType:type
+			SimpleJunction(ruleName, args):junctioned
+			-> [type, result, junctioned]
+		|	-> result
+		),
+
+	Junction :ruleName :args =
+		UpcomingCommaJunction:upcoming
+		DisableCommas(upcoming || this.disableCommas)
+
+		(	SimpleJunction(ruleName, args):result
+			(	// We only need to check for a comma branch if we have an upcoming comma junction
+				?upcoming
+				(	addComma(true)
+					SimpleJunction(ruleName, args)
+				)*:commaSeparated
+				// If there are comma-separated junctions, then they must have comma before the junction keyword
+				// aka. they must have an Oxford/serial comma.
+				addComma(true)
+				JunctionType:type
+				Junction(ruleName, args, true):junctioned
+				-> [type, result].concat(commaSeparated).concat([junctioned])
+			|	-> result
+			)
+		)?:result
+
+		// Check if there are any more comma junctions on their way, enabling commas again if there aren't
+		UpcomingCommaJunction:upcoming
+		DisableCommas(upcoming)
+
+		?result
+		-> result,
+
+	StartRule =
+			seq('R:')
+		|	seq('Rule:'),
+	NewRule =
+		StartRule
+		spaces
+		&(toEOL):ruleText
+		{this.ruleVars = {}}
+		{this.ruleVarsCount = 0}
+		Modifier:mod
+		Junction('RuleBody', [[], []]):ruleLF
+		EOLTerminator
+		{_.cloneDeep(mod)}:mod
+		{mod.length === 2 ? (mod[1][1] = ruleLF) : (mod[1] = ruleLF)}
+		-> ['Rule', mod, ['StructuredEnglish', ruleText]],
+
+	StartFactType =
+			seq('F:')
+		|	seq('Fact type:'),
+	NewFactType =
+		StartFactType {[]}:factType
+		(	Identifier:identifier
+			addVerb:v
+			{factType.push(identifier, v)}
+		)+
+		(	Identifier:identifier
+			{factType.push(identifier)}
+		)?
+		-> function() {
+			$elf.AddFactType(factType, factType);
+			var attributes = ['Attributes'];
+			if(factType.length === 3 && (factType[1][1] === 'has' || factType[1][1] === 'is of')) {
+				synFactType = _.cloneDeep(factType);
+				synFactType.reverse()
+				if(synFactType[1][1] === 'has') {
+					synFactType[1][1] = 'is of'
+				}
+				else {
+					synFactType[1][1] = 'has'
+				}
+				$elf.AddFactType(synFactType, factType);
+				attributes.push(['SynonymousForm', synFactType])
+			}
+			return ['FactType'].concat(factType).concat([attributes]);
+		},
+
+	StartVocabulary =
+		seq('Vocabulary:')
+		-> 'Vocabulary',
+	StartTerm =
+		(	seq('T:')
+		|	seq('Term:')
+		)
+		-> 'Term',
+	StartName =
+		(	seq('N:')
+		|	seq('Name:')
+		)
+		-> 'Name',
+	NewIdentifier =
+		(	StartVocabulary
+		|	StartTerm
+		|	StartName
+		):identifierType
+		ClearSuggestions
+		AddIdentifier(identifierType):func
+		-> function() {
+			return func().concat([['Attributes']]);
+		},
+	NewAttribute =
+		{_.last(this.lines)}:currentLine
+		AllowedAttrs(currentLine[0]):attrName
+		{attrName.replace(/ /g, '')}:attrName
+		spaces
+		ApplyFirstExisting(['Attr' + attrName, 'DefaultAttr']):attrValOrFunc
+		-> function() {
+			var lastLine = $elf.lines.pop(),
+				attrVal = typeof attrValOrFunc === 'function' ? attrValOrFunc(lastLine) : attrValOrFunc;
+			_.last(lastLine).push([attrName, attrVal]);
+			return lastLine;
+		},
+
+	AllowedAttrs :termOrFactType =
+		matchForAny('seq',this.branches.AllowedAttrs.call(this, termOrFactType)):attrName
+		-> attrName.replace(':',''),
+	DefaultAttr =
+		toSBVREOL,
+	AttrConceptType =
+		// A concept type has to be a term (cannot be a name)
+		Term:term
+		-> function(currentLine) {
+			var identifier;
+			if (currentLine[0] === 'FactType') {
+				var attributes = _.last(currentLine),
+					termForm = _.find(attributes, [0, 'TermForm'])
+				if (termForm) {
+					identifier = termForm[1];
+				} else {
+					throw new Error('Cannot have a concept type for a fact type that does not have a term-form.');
+				}
+			} else {
+				identifier = currentLine.slice(0, 3);
+			}
+			var identifierName = identifier[1],
+				identifierVocab = identifier[2];
+			// Only allow one instance of Concept Type: attribute.
+			if($elf.vocabularies[identifierVocab]['ConceptTypes'].hasOwnProperty(identifier)) {
+				throw new Error('Two concept type attributes');
+			}
+			if(identifier[0] !== 'FactType') {
+				// Do not allow a term to have itself as its concept type.
+				if($elf.IdentifiersEqual(identifier, term)) {
+					throw new Error('A term cannot have itself as its concept type');
+				}
+				var termName = term[1],
+					termVocab = term[2];
+				$elf.vocabularies[identifierVocab]['ConceptTypes'][identifier] = term;
+				$elf.vocabularies[termVocab]['IdentifierChildren'][termName].push(identifier.slice(1));
+			}
+			return term;
+		},
+	AttrDefinition =
+		(	addThe?
+			// The following section is copied from RuleBody, should really be sorted properly.
+			{this.ruleVars = {}}
+			{this.ruleVarsCount = 0}
+			TermEntity:termEntity
+			EOLTerminator
+			-> function(currentLine) {
+				if(currentLine[0] !== 'FactType') {
+					$elf.vocabularies[currentLine[2]]['ConceptTypes'][currentLine.slice(0, 3)] = termEntity.term;
+					$elf.vocabularies[currentLine[2]]['IdentifierChildren'][termEntity.term[1]].push([currentLine[1], currentLine[2]]);
+				}
+				return termEntity.lf;
+			}
+		|	Value:value
+			(	addComma
+				Value
+			)*:values
+			(	(	addComma?
+					Disjunction
+					Value
+				)+:moreValues
+			|	// The or is only required if we had comma-separated values.
+				?(values.length === 0)
+			)
+			-> ['Enum', value].concat(values, moreValues)
+		),
+	AttrGuidanceType =
+		matchForAny('seq', this.branches.AttrGuidanceType),
+	AttrNecessity =
+		(	&(toEOL):ruleText
+			{this.ruleVars = {}}
+			{this.ruleVarsCount = 0}
+			RuleBody([], []):lf
+			EOLTerminator
+			-> ['Rule', ['NecessityFormulation', lf], ['StructuredEnglish', 'It is necessary that ' + ruleText]]
+		|	toSBVREOL
+		),
+	AttrReferenceScheme =
+		(	Term:t
+			EOLTerminator
+			-> t
+		|	toSBVREOL
+		),
+	AttrSynonym =
+		{_.last(this.lines)}:currentLine
+		AddIdentifier(currentLine[0], currentLine[1]),
+	AttrSynonymousForm =
+		{[]}:factType
+		(	Identifier:identifier
+			addVerb:v
+			{factType.push(identifier, v)}
+		)+
+		(	Identifier:identifier
+			{factType.push(identifier)}
+		)?
+		-> function(currentLine) {
+			$elf.AddFactType(factType, currentLine.slice(1,-1));
+			return factType;
+		},
+	AttrTermForm =
+		AddIdentifier('Term'):func
+	-> function(currentLine) {
+		var term = func();
+		for(var i = 0; i < currentLine.length; i++) {
+			if(currentLine[i][0] === 'Term') {
+				var factType = [term, ['Verb', 'has', false], currentLine[i]];
+				$elf.AddFactType(factType, factType);
+			}
+		}
+		return term;
+	},
+	AttrReferenceType =
+			seq('informative')
+		|	seq('strict'),
+
+	StartComment =
+		seq('--'),
+	NewComment =
+		StartComment
+		toEOL,
+
+	EOLTerminator =
+		Terminator?
+		spaces
+		&(	EOL
+		|	end
+		),
+	Terminator =
+		spaces
+		Keyword('.',true),
+
+	space =
+			^space
+		|	NewComment,
+
+	Line =
+		spaces
+		(	(	NewIdentifier
+			|	NewFactType
+			|	NewAttribute
+			):func
+			-> func()
+		|	NewRule
+		):l
+		ClearSuggestions
+		{this.lines.push(l)}
+		-> l,
+	Process =
+		EOLSpaces?
+		Line?
+		(	EOLSpaces
+			Line
+		)*
+		space*
+		end
+		-> this.lines
+}
+
+SBVRParser.ClearSuggestions = function() {};
+/**
+	Following are "instance" variables/functions rather than shared.
+*/
+SBVRParser.initialize = function() {
+	this.builtInVocab = '';
+	this.builtInVocabInputHead = '';
+	this.allowedAttrLists = _.cloneDeep(defaultAllowedAttrLists);
+	this.reset();
+};
+
+SBVRParser._enableTokens = function() {
+	SBVRLibs._enableTokens.call(this, ['StartVocabulary', 'StartTerm', 'StartName', 'StartFactType', 'StartRule', 'NewComment', 'Vocabulary', 'Term', 'Name', 'Modifier', 'Verb', 'Keyword', 'AllowedAttrs', 'AttrGuidanceType', 'Number', 'Value']);
+};
+SBVRParser._sideEffectingRules = [
+	'Process',
+	'Line'
+];
+
+SBVRParser._AddIdentifier = function(identifierType, identifier, baseSynonym) {
+	if(baseSynonym == null) {
+		baseSynonym = identifier;
+	}
+	if(identifierType === 'Vocabulary') {
+		this.AddVocabulary(identifier, baseSynonym);
+	}
+	else {
+		var vocabulary = this.vocabularies[this.currentVocabulary];
+		// Make sure the identifier isn't taken, if it is then fail (for vocabs we allow switching back to that vocab by redeclaring).
+		if(vocabulary['IdentifierChildren'].hasOwnProperty(identifier)) {
+			this._pred(false);
+		}
+		if(baseSynonym === identifier) {
+			// If this is the base synonym then add the initial mappings
+			vocabulary['IdentifierChildren'][baseSynonym] = [];
+		}
+		else {
+			// Otherwise point to them
+			vocabulary['IdentifierChildren'][identifier] = vocabulary['IdentifierChildren'][baseSynonym];
+		}
+		vocabulary[identifierType][identifier] = baseSynonym;
+	}
+	// Check for longest identifier between current and pluralised form, as the plural form may well be (and often is) longer.
+	this.longestIdentifier[identifierType] = Math.max(identifier.length, identifier.pluralize().length, this.longestIdentifier[identifierType]);
+	if(identifierType === 'Vocabulary') {
+		return [identifierType, identifier];
+	}
+	else {
+		return [identifierType, identifier, this.currentVocabulary];
+	}
+};
+
+// Returns the base synonym for this identifier.
+SBVRParser.BaseSynonym = function(identifier) {
+	var identifierType = identifier[0],
+		identifierName = identifier[1],
+		vocabulary = identifier[2];
+	var identifiers = this.vocabularies[vocabulary][identifierType];
+	if(identifiers.hasOwnProperty(identifierName)) {
+		identifierName = identifiers[identifierName];
+	}
+	else {
+		identifierName = identifierName.singularize();
+		this._pred(identifiers.hasOwnProperty(identifierName));
+		identifierName = identifiers[identifierName];
+	}
+	return [identifierType, identifierName, vocabulary];
+};
+
+// Checks that the identifier is valid in this point of the fact type and returns the identifier as it is found in the fact type.
+SBVRParser.IsFactTypeIdentifier = function(identifier, factTypeSoFar) {
+	var identifierType = identifier[0],
+		vocabulary = identifier[2],
+		baseIdentifier = this.BaseSynonym(identifier);
+	var identifiers = this.branches[identifierType].call(this, factTypeSoFar, vocabulary);
+	this._pred(identifiers.indexOf(baseIdentifier[1]) !== -1);
+	return baseIdentifier;
+};
+
+SBVRParser.IsVerb = function(factTypeSoFar, verb) {
+	verb = ['Verb', verb];
+	var currentLevel = this._traverseFactType(factTypeSoFar);
+	// Check we have a fact type matching this chain.
+	this._pred(currentLevel!==false);
+	if(currentLevel.hasOwnProperty(verb)) {
+		// We found the verb.
+		return;
+	}
+	this._pred(currentLevel.hasOwnProperty('__valid'));
+	// We have a valid fact type up to here, try a new one.
+	// TODO: Should this actually be looking if the verb before last term is valid?
+	return this.IsVerb([], verb);
+};
+
+SBVRParser._verbForm = function(verb) {
+	// Students are people.. Student is person
+	if(verb === 'are') {
+		return 'is';
+	}
+	// People have eyes.. Person has eyes
+	if(verb === 'have') {
+		return 'has';
+	}
+	// People are eating.. Person is eating
+	// Not: Police arest people.. Police isst people
+	// I used a mispelling here because I could not find a case with a correct word, however in case I just missed one I'd rather check for the space.
+	// People aren't animals.. Person isn't animal. Should probably be allowed, however what are our thoughts on contractions?
+	if(verb.slice(0,4) === 'are ') {
+		return 'is ' + verb.slice(4);
+	}
+	return verb;
+};
+
+SBVRParser.IsFactType = function(factType) {
+	var currentLevel = this._traverseFactType(factType);
+	if(currentLevel === false) {
+		return false;
+	}
+	return currentLevel.__valid;
+};
+
+var removeRegex = new RegExp('^(?:' +
+								[	['Term',''].toString(),
+									['Name',''].toString(),
+									['Verb',''].toString()
+								].join('|') +
+							')(.*?)(?:,(.*))?$'),
+	defaultAllowedAttrLists = [
+		'Concept Type:',
+		'Definition:',
+		'Definition (Informal):',
+		'Description:',
+		'Dictionary Basis:',
+		'Example:',
+		'General Concept:',
+		'Namespace URI:',
+		'Necessity:',
+		'Note:',
+		'Possibility:',
+		'Reference Scheme:',
+		'See:',
+		'Source:',
+		'Subject Field:'
+	];
+
+defaultAllowedAttrLists = {
+	Term: [
+		'Synonym:'
+	].concat(defaultAllowedAttrLists),
+	Name: [
+		'Synonym:'
+	].concat(defaultAllowedAttrLists),
+	FactType: [
+		'Synonymous Form:',
+		'Term Form:',
+		'Reference Type:'
+	].concat(defaultAllowedAttrLists),
+	Rule: [
+		'Rule Name:',
+		'Guidance Type:',
+		'Source:',
+		'Synonymous Statement:',
+		'Note:',
+		'Example:',
+		'Enforcement Level:'
+	]
+};
+function getValidFactTypeParts(vocabulary, identifierType, factTypeSoFar) {
+	var vocabularies = this.vocabularies;
+	if(factTypeSoFar == null || factTypeSoFar.length === 0) {
+		var identifiers;
+		if(vocabulary == null) {
+			identifiers = vocabularies[this.currentVocabulary][identifierType];
+			// identifiers = {};
+			// for(vocabulary in vocabularies) {
+				// if(vocabularies.hasOwnProperty(vocabulary)) {
+					// _.assign(identifiers, vocabularies[vocabulary][identifierType]);
+				// }
+			// }
+		}
+		else {
+			identifiers = vocabularies[vocabulary][identifierType];
+		}
+		return Object.keys(identifiers);
+	}
+	var factTypePart,
+		currentLevel = this._traverseFactType(factTypeSoFar),
+		factTypeParts = {},
+		followChildrenChain = function(vocabulary, identifier) {
+			vocabulary = vocabularies[vocabulary];
+			var identifiers = vocabulary[identifierType];
+			if(identifiers.hasOwnProperty(identifier)) {
+				factTypeParts[identifiers[identifier]] = true;
+			}
+			for(var i = 0; i < vocabulary['IdentifierChildren'][identifier].length; i++) {
+				var child = vocabulary['IdentifierChildren'][identifier][i];
+				followChildrenChain(child[1], child[0]);
+			}
+		};
+	for(factTypePart in currentLevel) {
+		if(currentLevel.hasOwnProperty(factTypePart)) {
+			var matches = removeRegex.exec(factTypePart);
+			var factTypePartVocabulary;
+			if(matches != null) {
+				factTypePart = matches[1];
+				if(matches[2]) {
+					factTypePartVocabulary = matches[2];
+					followChildrenChain(factTypePartVocabulary, factTypePart);
+				}
+				else {
+					factTypeParts[factTypePart] = true;
+				}
+			}
+		}
+	}
+	return Object.keys(factTypeParts);
+}
+SBVRParser.reset = function() {
+	SBVRLibs.initialize.call(this);
+	this.branches = {
+		ClearSuggestions: [], //This stops us suggesting any autocomplete before this point.
+		StartVocabulary: ['Vocabulary:'],
+		StartTerm: ['Term:      '],
+		StartName: ['Name:      '],
+		StartFactType: ['Fact type: '],
+		StartRule: ['Rule:      '],
+		Vocabulary: function(factTypeSoFar) {
+			return Object.keys(this.vocabularies);
+		},
+		Term: function(factTypeSoFar, vocabulary) {
+			return getValidFactTypeParts.call(this, vocabulary, 'Term', factTypeSoFar);
+		},
+		Name: function(factTypeSoFar, vocabulary) {
+			return getValidFactTypeParts.call(this, vocabulary, 'Name', factTypeSoFar);
+		},
+		Verb: function(factTypeSoFar, vocabulary) {
+			if(factTypeSoFar === true) {
+				// If any verb is allowed then we have no guidance to give.
+				return [];
+			}
+			return getValidFactTypeParts.call(this, vocabulary, 'Verb', factTypeSoFar);
+		},
+		AllowedAttrs: function(termOrFactType) {
+			if(this.allowedAttrLists.hasOwnProperty(termOrFactType)) {
+				return this.allowedAttrLists[termOrFactType];
+			}
+			else if(termOrFactType == null) {
+				return this.allowedAttrLists.Term.concat(this.allowedAttrLists.Name, this.allowedAttrLists.FactType);
+			}
+			return [];
+		},
+		AttrGuidanceType: [
+			'operative business rule',
+			'structural business rule',
+			'advice of permission',
+			'advice of possibility',
+			'advice of optionality',
+			'advice of contingency'
+		],
+		Modifier: [
+			'It is obligatory that',
+			'It is necessary that',
+			'It is prohibited that',
+			'It is forbidden that',
+			'It is impossible that',
+			'It is not possible that',
+			'It is possible that',
+			'It is permitted that'
+		],
+		Quantifier: [
+			'each',
+			'a',
+			'a given',
+			'an',
+			'some',
+			'at most',
+			'at least',
+//			'and at most',
+			'more than',
+			'exactly',
+			'no'
+		],
+		JoiningQuantifier: ['and at most'],
+		Number: [
+			'1', '2', '3', '4', '5', '6', '7', '8', '9',
+			'one'
+		],
+		addThat: ['that', 'that the'],
+		addThe: ['the'],
+		addComma: [','],
+		Disjunction: ['or'],
+		Conjunction: ['and'],
+		Terminator: ['.']
+	};
+	this.longestIdentifier = {
+		'Vocabulary': 0,
+		'Term': 0,
+		'Name': 0
+	};
+	this.ruleVars = {};
+	this.ruleVarsCount = 0;
+	this.lines = ['Model'];
+	this.disableCommas = false;
+
+	// Process the built-in vocabulary,
+	// making use of reusing memoisations,
+	// and returning this.inputHead to the way it was found.
+	var origInputHead = this.inputHead;
+	if(this.builtInVocab !== '') {
+		this.inputHead = this.builtInVocabInputHead;
+		this.matchAll(this.builtInVocab, 'Process');
+		this.builtInVocabInputHead = this.inputHead;
+	}
+	this.inputHead = null;
+	// And switching back to the "Default" vocabulary for normal parsing.
+	this.inputHead = null;
+	this.matchAll('Vocabulary: Default', 'Process');
+	this.inputHead = origInputHead;
+};
+
+SBVRParser.AddBuiltInVocab = function(vocabulary) {
+	try {
+		var origInputHead = this.inputHead;
+		vocabulary += '\n';
+		this.matchAll(vocabulary, 'Process');
+		this.inputHead = origInputHead;
+		this.builtInVocab += vocabulary;
+	}
+	catch(e) {
+		throw e; // OMeta doesn't allow you to omit the catch block.
+	}
+	finally {
+		this.reset();
+	}
+};
+
+SBVRParser.AddCustomAttribute = function(attributeName, attachedTo) {
+	if(attachedTo == null) {
+		for(attachedTo in this.allowedAttrLists) {
+			if(this.allowedAttrLists.hasOwnProperty(attachedTo)) {
+				this.allowedAttrLists[attachedTo].push(attributeName);
+			}
+		}
+	}
+	else if(this.allowedAttrLists.hasOwnProperty(attachedTo)) {
+		this.allowedAttrLists[attachedTo].push(attributeName);
+	}
+	else {
+		throw new Error('Unknown attachment');
+	}
+};
+
+/** **/
+SBVRParser.matchForAny = function(rule, arr, returnIndex) {
+	var self = this,
+	origInput = this.input,
+	ref = {},
+	result = ref;
+
+	for (var idx = 0; idx < arr.length; idx++) {
+		try {
+			self.input = origInput;
+			result = self._applyWithArgs.call(self, rule, arr[idx]);
+		}
+		catch (e) {
+			if (!(e instanceof SyntaxError)) {
+				throw e;
+			}
+		}
+
+		if (result !== ref) {
+			if (returnIndex) {
+				return idx;
+			}
+			return result;
+		}
+	}
+	throw this._fail();
+};
+SBVRParser.matchForAll = function(rule, arr) {
+	for (var idx = 0; idx < arr.length; idx++) {
+		this._applyWithArgs.call(this, rule, arr[idx]);
+	}
+};
+SBVRParser.matchUntil = function(fn) {
+	try {
+		while (!fn(this.input.head())) {
+			this.input = this.input.tail();
+		}
+	} catch (e) {}
+};
+//TODO: This is a bit of a hack for case insensitivity, a better solution needs to be implemented in future.
+SBVRParser.exactly = function(wanted) {
+	if (wanted.toLowerCase() === this._apply("lowerCaseAnything")) {
+		return wanted;
+	}
+	throw this._fail();
+};
+
+// For performance we can use this.
+SBVRParser._disablePrependingInput();

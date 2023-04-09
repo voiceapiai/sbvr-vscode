@@ -215,7 +215,7 @@ class SbvrDocumentSymbolProvider implements vscode.DocumentSymbolProvider {
       parser.setInput(text);
       const LF = parser.matchAll(text, 'Process');
 
-      console.log(parser.lines);
+      // console.log(parser.lines);
 
       resolve(symbols);
     });
