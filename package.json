@@ -53,18 +53,19 @@
     "onLanguage:sbvr"
   ],
   "icon": "./icons/roadmap.png",
-  "main": "./out/extension.js",
+  "main": "./out/src/extension.js",
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
+    "build": "esbuild --sourcemap=external --target=esnext --platform=node --format=cjs --outdir=out $(find src \\( -name '*.ts' \\))",
     "lint": "eslint \"src/**/*.ts\"",
     "watch": "tsc -watch -p ./",
+    "build:watch": "esbuild --sourcemap=external --target=esnext --platform=node --format=cjs --outdir=out $(find src \\( -name '*.ts' \\)) --watch",
     "deploy": "vsce publish --yarn"
   },
   "dependencies": {
     "@balena/sbvr-parser": "^1.4.3",
-    "@balena/sbvr-types": "^3.5.0",
-    "vscode-languageclient": "^8.1.0"
+    "@balena/sbvr-types": "^3.5.0"
   },
   "devDependencies": {
     "@types/node": "^16.11.7",
@@ -73,10 +74,15 @@
     "@typescript-eslint/parser": "^5.42.0",
     "@vscode/test-electron": "^2.2.3",
     "@vscode/vsce": "^2.18.0",
+    "esbuild": "^0.17.15",
     "eslint": "^8.26.0",
     "js-yaml": "^4.1.0",
+    "peggy": "^3.0.2",
     "prettier": "^2.8.4",
     "typescript": "^4.9.4",
-    "vscode-languageserver-textdocument": "^1.0.1"
-  }
+    "vscode-languageclient": "^8.1.0",
+    "vscode-languageserver": "^8.1.0",
+    "vscode-languageserver-textdocument": "^1.0.8"
+  },
+  "peerDependencies": {}
 }
