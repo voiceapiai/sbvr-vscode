@@ -19,6 +19,16 @@
 			"preLaunchTask": "npm: watch",
       "internalConsoleOptions": "neverOpen"
 		},
+    {
+			"type": "node",
+			"request": "attach",
+			"name": "Attach to Server",
+			"port": 6009,
+			"restart": true,
+			"outFiles": [
+				"${workspaceRoot}/dist/**/*.js"
+			]
+		},
 		{
 			"name": "Run Extension Tests",
 			"type": "extensionHost",

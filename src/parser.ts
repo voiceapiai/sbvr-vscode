@@ -1,13 +1,14 @@
 import * as peggy from 'peggy';
 import * as fs from 'fs';
 import * as path from 'path';
+import { PATHS } from './constants';
 
 export class SbvrPeggyParser<T = any> {
   private readonly parser!: peggy.Parser;
 
   constructor(startRule?: string | undefined) {
     try {
-      const file = path.join(__dirname, '../grammar/svbr.peggy');
+      const file = path.join(__dirname, '../..', PATHS.GRAMMAR);
       const grammar = fs.readFileSync(file).toString();
       this.parser = peggy.generate(
         grammar,

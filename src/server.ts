@@ -1,22 +1,23 @@
-import * as lsp from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
+import * as lsp from 'vscode-languageserver/node';
 import { SbvrPeggyParser } from './parser';
 import {
-  toLSPRange,
+  EasySemanticTokensBuilder,
   containsPosition,
   escapeMarkdown,
-  EasySemanticTokensBuilder,
-  isBefore,
   isBeforeOrEqual,
   replaceWhitespaceLeft,
-  toLSPPosition,
   replaceWhitespaceRight,
+  toLSPPosition,
+  toLSPRange,
 } from './utils';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
-import { SBVRParser } from '@balena/sbvr-parser';
 
-const conn = lsp.createConnection(lsp.ProposedFeatures.all);
+// Create a connection for the server, using Node's IPC as a transport.
+// Also include all preview / proposed LSP features.
+const connection = lsp.createConnection(lsp.ProposedFeatures.all);
+
 const documents: lsp.TextDocuments<TextDocument> = new lsp.TextDocuments(
   TextDocument
 );
@@ -33,7 +34,7 @@ const parser = new SbvrPeggyParser();
 
 const docs: any[] = [];
 
-conn.onInitialize(params => {
+connection.onInitialize(params => {
   return {
     capabilities: {
       textDocumentSync: lsp.TextDocumentSyncKind.Incremental,
@@ -44,8 +45,8 @@ conn.onInitialize(params => {
         range: false,
       },
       hoverProvider: true,
-      completionProvider: { triggerCharacters: [' ', '-', '!'] },
-      documentFormattingProvider: true,
+      completionProvider: { triggerCharacters: [':'] },
+      documentFormattingProvider: false,
       workspace: {
         workspaceFolders: {
           supported: true,
@@ -56,20 +57,26 @@ conn.onInitialize(params => {
 });
 
 const documentSettings = new Map<string, Thenable<unknown>>();
-conn.onInitialized(() => {
-  conn.client.register(lsp.DidChangeConfigurationNotification.type, undefined);
+connection.onInitialized(() => {
+  connection.client.register(
+    lsp.DidChangeConfigurationNotification.type,
+    undefined
+  );
+  connection.console.log('SERVER: onInitialized');
 });
-conn.onDidChangeConfiguration(change => {
+connection.onDidChangeConfiguration(change => {
   documentSettings.clear();
+  connection.console.log('SERVER: onDidChangeConfiguration');
 });
 documents.onDidClose(e => {
   documentSettings.delete(e.document.uri);
+  connection.console.log('SERVER: onDidClose');
 });
 const getConfiguration = async (uri: string): Promise<any> => {
   if (documentSettings.has(uri)) {
     return documentSettings.get(uri);
   }
-  const result = await conn.workspace.getConfiguration({
+  const result = await connection.workspace.getConfiguration({
     section: 'sbvr',
     scopeUri: uri,
   });
@@ -81,13 +88,13 @@ const isSbvrFile = (textDocument: TextDocument) =>
   textDocument.languageId === 'sbvr' || textDocument.uri.endsWith(`.sbvr`);
 
 const check = (textDocument: TextDocument) => {
-  console.log('DEBUG ~ file: server.ts:84 ~ check ~ textDocument:', textDocument);
+  connection.console.log('SERVER: check');
 
   if (!isSbvrFile(textDocument)) {
-    conn.sendDiagnostics({ uri: textDocument.uri, diagnostics: [] });
+    connection.sendDiagnostics({ uri: textDocument.uri, diagnostics: [] });
   } else {
     const err = parser.check(textDocument.getText());
-    conn.sendDiagnostics({
+    connection.sendDiagnostics({
       uri: textDocument.uri,
       diagnostics:
         err === null
@@ -104,17 +111,18 @@ const check = (textDocument: TextDocument) => {
 };
 
 documents.onDidOpen(({ document }) => {
+  connection.console.log('SERVER: onDidOpen');
   check(document);
 });
+// The content of a text document has changed. This event is emitted
+// when the text document first opened or when its content has changed.
 documents.onDidChangeContent(({ document }) => {
+  connection.console.log('SERVER: onDidChangeContent');
   check(document);
 });
 
-conn.languages.semanticTokens.on(({ textDocument: { uri } }) => {
-  console.log(
-    'DEBUG ~ file: server.ts:112 ~ conn.languages.semanticTokens.on ~ uri:',
-    uri
-  );
+connection.languages.semanticTokens.on(({ textDocument: { uri } }) => {
+  connection.console.log('SERVER: semanticTokens.on');
 
   const textDocument = documents.get(uri);
   if (textDocument === undefined || !isSbvrFile(textDocument)) {
@@ -151,7 +159,7 @@ conn.languages.semanticTokens.on(({ textDocument: { uri } }) => {
   return builder.build();
 });
 
-conn.onDocumentFormatting(
+connection.onDocumentFormatting(
   async ({
     options,
     textDocument: { uri },
@@ -257,9 +265,11 @@ conn.onDocumentFormatting(
   }
 );
 
-conn.onHover(({ position, textDocument: { uri } }) => {
+connection.onHover(({ position, textDocument: { uri } }) => {
   const textDocument = documents.get(uri);
-  if (textDocument === undefined || !isSbvrFile(textDocument)) {
+  connection.console.log('SERVER: onHover: ' + 'position.line=' + position.line);
+  return null;
+  /* if (textDocument === undefined || !isSbvrFile(textDocument)) {
     return;
   }
   const f = parser.parse(textDocument.getText());
@@ -307,10 +317,10 @@ conn.onHover(({ position, textDocument: { uri } }) => {
     } else {
       line.type satisfies 'macro';
     }
-  }
+  } */
 });
 
-conn.onCompletion(({ position, textDocument: { uri } }) => {
+connection.onCompletion(({ position, textDocument: { uri } }) => {
   const textDocument = documents.get(uri);
   if (textDocument === undefined || !isSbvrFile(textDocument)) {
     return;
@@ -356,5 +366,5 @@ conn.onCompletion(({ position, textDocument: { uri } }) => {
   }
 });
 
-documents.listen(conn);
-conn.listen();
+documents.listen(connection);
+connection.listen();
