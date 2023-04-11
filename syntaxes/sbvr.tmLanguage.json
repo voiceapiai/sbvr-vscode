@@ -68,7 +68,7 @@
       "patterns": [
         {
           "name": "keyword.operator.sbvr",
-          "match": "\\b(is|are|has|have|can|could|may|might|must|should|shall|will)\\b"
+          "match": "\\b(includes|is|of|are|has|have|can|could|may|might|must|should|shall|will)\\b"
         },
         {
           "name": "entity.name.function.macro",

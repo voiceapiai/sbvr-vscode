@@ -1,0 +1,44 @@
+Vocabulary: Rental
+
+Term: business currency
+    Concept Type: Short Text (Type)
+Term: credit card
+    Concept Type: Text (Type)
+Term: estimated rental charge
+    Concept Type: Number (Type)
+Term: rental
+    Concept Type: Text (Type)
+Term: rental charge
+    Concept Type: Number (Type)
+Term: rental period
+    Concept Type: Number (Type)
+Term: renter
+    Concept Type: Text (Type)
+Term: requested car group
+    Concept Type: Short Text (Type)
+Term: return branch
+    Concept Type: Short Text (Type)
+
+Fact Type: business currency of rental
+Fact Type: credit card is provisionally charged with estimated rental charge
+Fact Type: rental charge is calculated in business currency
+    Synonymous Form: rental charge value is defined by business currency
+Fact Type: rental has business currency
+Fact Type: rental has rental charge
+Fact Type: rental has requested car group
+Fact Type: rental has return branch
+    Necessity: each rental has exactly one return branch.
+Fact Type: rental includes rental period
+Fact Type: rental is open
+Fact Type: rental is the responsibility of renter
+Fact Type: renter has credit card
+
+Rule: It is necessary that each rental has exactly one requested car group.
+Rule: It is necessary that each rental includes exactly one rental period.
+Rule: It is necessary that each rental has exactly one return branch.
+
+Rule: It is permitted that a rental is open.
+
+Rule: It is necessary that each rental that is open is the responsibility of a renter that has a credit card that is provisionally charged with an estimated rental charge.
+
+Rule: It is necessary that a rental charge that is of each rental, is calculated in a business currency that the rental has.

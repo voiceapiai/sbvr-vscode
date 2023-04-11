@@ -4,6 +4,7 @@
 
 	// List of extensions which should be recommended for users of this workspace.
 	"recommendations": [
-		"rvest.vs-code-prettier-eslint"
+		"rvest.vs-code-prettier-eslint",
+    "PeggyJS.peggy-language"
 	]
 }

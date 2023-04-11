@@ -1,15 +1,21 @@
 {
   "name": "sbvr-vscode",
   "displayName": "SBVR",
-  "description": "SBVR language client & syntax highlight.\nThe SBVR standard defines the vocabulary and rules for documenting the semantics of business vocabularies, business facts, and business rules; as well as an XMI schema for the interchange of business vocabularies and business rules among organizations and between software tools.",
+  "description": "SBVR standard grammar & syntax highlight.\nThe SBVR standard defines the vocabulary and rules for documenting the semantics of business vocabularies, business facts, and business rules; as well as an XMI schema for the interchange of business vocabularies and business rules among organizations and between software tools.",
   "version": "0.0.1",
   "publisher": "voiceapi",
-  "private": true,
+  "preview": true,
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/voiceapiai/sbvr-vscode"
   },
+  "badges": [
+    {
+      "description": "Version",
+      "href": "https://vsmarketplacebadges.dev/version/voiceapi.sbvr-vscode.svg"
+    }
+  ],
   "engines": {
     "vscode": "^1.76.0"
   },
@@ -29,6 +35,10 @@
         "extensions": [
           ".sbvr"
         ],
+        "icon": {
+          "light": "./icons/roadmap.svg",
+          "dark": "./icons/roadmap.svg"
+        },
         "configuration": "./language-configuration.json"
       }
     ],
@@ -40,17 +50,29 @@
       }
     ]
   },
-  "activationEvents": [],
-  "main": "./out/extension.js",
+  "configurationDefaults": {
+    "[sbvr]": {
+      "trace.server": true,
+      "editor.semanticHighlighting.enabled": true
+    }
+  },
+  "activationEvents": [
+    "onLanguage:sbvr"
+  ],
+  "icon": "./icons/roadmap.png",
+  "main": "./out/src/extension.js",
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
+    "build": "esbuild --sourcemap=external --target=esnext --platform=node --format=cjs --outdir=out $(find src \\( -name '*.ts' \\))",
     "lint": "eslint \"src/**/*.ts\"",
     "watch": "tsc -watch -p ./",
+    "build:watch": "esbuild --sourcemap=external --target=esnext --platform=node --format=cjs --outdir=out $(find src \\( -name '*.ts' \\)) --watch",
     "deploy": "vsce publish --yarn"
   },
   "dependencies": {
-    "vscode-languageclient": "^8.1.0"
+    "@balena/sbvr-parser": "^1.4.3",
+    "@balena/sbvr-types": "^3.5.0"
   },
   "devDependencies": {
     "@types/node": "^16.11.7",
@@ -59,10 +81,15 @@
     "@typescript-eslint/parser": "^5.42.0",
     "@vscode/test-electron": "^2.2.3",
     "@vscode/vsce": "^2.18.0",
+    "esbuild": "^0.17.15",
     "eslint": "^8.26.0",
     "js-yaml": "^4.1.0",
+    "peggy": "^3.0.2",
     "prettier": "^2.8.4",
     "typescript": "^4.9.4",
-    "vscode-languageserver-textdocument": "^1.0.1"
-  }
+    "vscode-languageclient": "^8.1.0",
+    "vscode-languageserver": "^8.1.0",
+    "vscode-languageserver-textdocument": "^1.0.8"
+  },
+  "peerDependencies": {}
 }
